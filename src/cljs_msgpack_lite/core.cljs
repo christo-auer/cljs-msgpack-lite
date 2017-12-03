@@ -149,7 +149,7 @@
   Returns the modified codec."
   {:pre [(s/assert ::codec codec)
          (s/assert ::byte id)
-         (s/assert ::packer packer)]
+         (s/assert ::packer unpacker)]
    :post [#(s/assert ::codec %)]}
   (let [unpacker 
         (fn [buffer]
