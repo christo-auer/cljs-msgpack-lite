@@ -10,3 +10,4 @@
 figwheel_server.log
 pom.xml
 .cljs_rhino_repl
+pom.xml.asc
