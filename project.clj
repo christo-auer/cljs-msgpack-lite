@@ -1,4 +1,4 @@
-(defproject cljs-msgpack-lite "0.1.1"
+(defproject cljs-msgpack-lite "0.1.2"
   :description "cljs-msgpack-lite is a lightweight and convenient wrapper around msgpack-lite for ClojureScript."
   :url "https://github.com/christo-auer/cljs-msgpack-lite"
 
