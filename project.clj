@@ -1,4 +1,4 @@
-(defproject cljs-msgpack-lite "0.1.0"
+(defproject cljs-msgpack-lite "0.1.1"
   :description "cljs-msgpack-lite is a lightweight and convenient wrapper around msgpack-lite for ClojureScript."
   :url "https://github.com/christo-auer/cljs-msgpack-lite"
 
@@ -6,15 +6,10 @@
 
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [camel-snake-kebab "0.4.0"]
-                 [org.clojure/clojurescript "1.9.908"]
-                 [orchestra "2017.11.12-1"]]
+                 [org.clojure/clojurescript "1.9.908"]]
 
   :plugins [[lein-cljsbuild "1.1.7" :exclusions [[org.clojure/clojure]]]
-            [lein-figwheel "0.5.13"]
-            [lein-npm "0.6.2"]]
-
-  :npm {:dependencies [[msgpack-lite "0.1.26"]
-                       [ws "3.3.1"]]}
+            [lein-figwheel "0.5.13"] ]
 
   :source-paths ["src"]
 

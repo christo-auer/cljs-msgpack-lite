@@ -1,0 +1,13 @@
+{
+  "name": "cljs-msgpack-lite",
+  "version": "0.1.1",
+  "description": "A ClojureScript wrapper around msgpack-lite",
+  "dependencies": {
+    "msgpack-lite": "^0.1.26"
+  },
+  "devDependencies": {
+    "ws": "^3.3.2"
+  },
+  "license": "MIT",
+  "repository": "https://github.com/christo-auer/cljs-msgpack-lite"
+}
