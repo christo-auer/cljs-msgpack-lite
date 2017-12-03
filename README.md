@@ -171,43 +171,10 @@ Or shorter:
       (add-ext-packers! 0x40 Game game-packer game-unpacker)
       (add-ext-packers! 0x41 Review review-packer review-unpacker)))
 ```
-We can now decode the type `Game` and `Review` using decode. Let's try this
-first without the automatic `js->clj` conversion: 
+We can now decode the type `Game` and `Review` using decode:
 ```clojurescript
 => (def botw-encoded (encode botw :codec game-codec))
-=> (decode otw-encoded :codec game-codec :js->clj false)
-#user.Game{:title "Zelda: Breath of the Wild",
- :year 2018,
- :platforms :switch,
- :reviews
- #js [#user.Review{:site "GameSpot", :score 10} #user.Review{:site "Polygon", :score 10} #user.Review{:site "IGN", :score 10}]}
-```
-It works as expected, only the array with the reviews is still in js format.
-When we try this with `:js->clj true`, however, we get:
-```clojurescript
-=> (decode b :codec game-codec :js->clj true)
-#object[Error Error: No protocol method IEmptyableCollection.-empty defined for type : [object Object]]
-Error: No protocol method IEmptyableCollection.-empty defined for type : [object Object]
-    ...
-```
-The problem is that `js->clj` recognizes our records as a collection (`coll?`)
-and wants to apply `empty` to it, which does not really make sense for a record
-(see `IEmptyableCollection` protocol for more info).
-Since `js->clj` does not need to convert our records anyway, we can simply
-extend our records to the protocol `IEncodeClojure` and define that `js->clj`
-leaves the values alone:
-```clojurescript
-(extend-type Game
-  IEncodeClojure
-  (-js->clj [x options] x))
-
-(extend-type Review
-  IEncodeClojure
-  (-js->clj [x options] x))
-```
-Now, we get the expected behavior:
-```clojurescript
-=> 
+=> (decode otw-encoded :codec game-codec)
 {:title "Zelda: Breath of the Wild",
  :year 2018,
  :platforms "switch",
@@ -218,15 +185,12 @@ Now, we get the expected behavior:
 ```
 Note that the underlying types here are really our records from above.
 
-Another option to avoid this is to use `deftype` instead of `defrecord` since
-then ClojureScript does not add any fancy collection features.
-
 As with `encode` above, `decode` gets rebound in the recursive calls and any
 options passed to the initial call are automatically passed to the all
 subsequend calls.
 
 # License
 
-Copyright ©2016 Christopher Auer
+Copyright ©2017 Christopher Auer
 
 Distributed under the MIT License. Please see the LICENSE file at the top level of this repo.
