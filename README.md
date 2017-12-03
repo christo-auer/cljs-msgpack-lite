@@ -224,3 +224,9 @@ then ClojureScript does not add any fancy collection features.
 As with `encode` above, `decode` gets rebound in the recursive calls and any
 options passed to the initial call are automatically passed to the all
 subsequend calls.
+
+# License
+
+Copyright ©2016 Christopher Auer
+
+Distributed under the MIT License. Please see the LICENSE file at the top level of this repo.
