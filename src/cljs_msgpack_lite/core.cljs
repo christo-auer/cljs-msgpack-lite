@@ -1,6 +1,5 @@
 (ns cljs-msgpack-lite.core
-  (:require [goog.object :as gobject]
-            [cljs.spec.alpha :as s]
+  (:require [cljs.spec.alpha :as s]
             [camel-snake-kebab.core :refer [->camelCase]]))
 
 
@@ -17,11 +16,25 @@
   (->  "msgpack-lite/lib/codec-base" js/require .-preset type))
 
 ; specs
+(defn- bool? [x] (contains? #{true false} x))
 (s/def ::any any?)
 (s/def ::buffer #(= (type %) Buffer))
-(s/def ::byte-array (s/coll-of (s/and int? #(<= 0 % 255))))
+(s/def ::byte (s/and int? #(<= 0 % 255)))
+(s/def ::byte-array (s/coll-of ::byte))
 (s/def ::codec #(= (type %) Codec))
 (s/def ::encode-options (s/keys :opt-un [::codec]))
+(s/def ::decode-options (s/keys :opt-un [::codec]))
+(s/def ::preset bool?)
+(s/def ::safe bool?)
+(s/def ::useraw bool?)
+(s/def ::binarraybuffer bool?)
+(s/def ::uint8array bool?)
+(s/def ::usemap bool?)
+(s/def ::create-codec-options (s/keys :opt-un [::preset ::safe ::useraw ::binarraybuffer ::uint8array ::usemap]))
+(s/def ::codec #(= (type %) Codec))
+(s/def ::packer fn?)
+(s/def ::unpacker fn?)
+(s/def ::type fn?)
 
 (defn ->buffer 
   "Convert an array of bytes into a buffer, leaves a buffer as a buffer.
@@ -31,7 +44,7 @@
   Example:
     (->buffer [0x12 0x13 0x14])"
   {:pre (s/assert (s/or ::buffer ::buffer ::byte-array ::byte-array))
-   :post (s/assert ::buffer?)}
+   :post (s/assert ::buffer)}
   [v]
   (Buffer (clj->js v)))
 
@@ -53,13 +66,11 @@
   encode [value & {:as options}]
   "Encodes the given value using `msgpack-lite`'s encode.
   The encoded value is returned in a `buffer`.
-  Any options are passed to `msgpack-lite`'s `encode` in a js'ed form, e.g.,
-  `encode value :foo-bar 42` results in `encode value {fooBar: 42}`.
   An optional `codec` can be passed with `:codec codec`.
   Note: `encode` is rebound so that any options passed to
-  the initial call are automatically passed to any subsequent call of `encode`.
-  Any options passed to recursive calls of `encode` 
-  overrides prior options (as in `merge`)."
+  the initial call are automatically passed to any subsequent 
+  call of `encode`.  Any options passed to recursive calls of 
+  `encode` overrides prior options (as in `merge`)."
   {:pre [(s/assert ::any value)
          (s/assert ::encode-options options)]
    :post [#(s/assert ::buffer %)]}
@@ -81,13 +92,14 @@
   decode [buffer & {:as options}]
   "Decodes the given buffer using `msgpack-lite`'s decode.
   `buffer` can be a `buffer` or a byte array (e.g., `[0x03 0x3f]`).
-  Any options are passed to `msgpack-lite`'s `decode` in a js'ed form, e.g.,
-  `decode value :foo-bar 42` results in `decode value {fooBar: 42}`.
   An optional `codec` can be passed with `:codec codec`.
   Note: `decode` is rebound so that any options passed to
   the initial call are automatically passed to any subsequent call of `decode`.
   Any options passed to recursive calls of `decode` 
   overrides prior options (as in `merge`)."
+  {:pre [(s/assert (s/or ::buffer ::buffer ::byte-array ::byte-array) buffer)
+         (s/assert ::decode-options options)]
+   :post [#(s/assert ::any %)]}
   (letfn [(-decode [buffer & {:as more-options}]
             (let [options (merge options more-options)
                   {keywordize-keys :keywordize-keys 
@@ -109,25 +121,61 @@
 
 
 (defn create-codec [& {:as options}] 
+  "Creates and returns a new codec with the given options. 
+  The options are defined on https://github.com/kawanet/msgpack-lite 
+  and can be defined by keywords, e.g., `(create-codec :useraw true)`"
+  {:pre [(s/assert ::create-codec-options options)]
+   :post [#(s/assert ::codec %)]}
   (msgpack.createCodec (prepare-options options)))
 
 (defn add-ext-packer! [codec id type packer]
+  "Adds the given packer to the codec, where `id` is the identifier for the 
+  msgpack extension (`(<= 0 id 255)`), type is the data type for which 
+  to use the packer and `packer` is a function that takes a value of 
+  type `type` and returns a `buffer` in which the value is encoded.
+  Returns the modified codec."
+  {:pre [(s/assert ::codec codec)
+         (s/assert ::byte id)
+         (s/assert ::type type)
+         (s/assert ::packer packer)]
+   :post [#(s/assert ::codec %)]}
   (.addExtPacker codec id type packer)
   codec)
 
 (defn add-ext-unpacker! [codec id unpacker]
-  (.addExtUnpacker codec id unpacker)
+  "Adds the given unpacker to the codec, where `id` is the identifier for the 
+  msgpack extension (`(<= 0 id 255)`) and `unpacker` is a function that takes 
+  a buffer, and extracts and returns the corresponding value.
+  Returns the modified codec."
+  {:pre [(s/assert ::codec codec)
+         (s/assert ::byte id)
+         (s/assert ::packer packer)]
+   :post [#(s/assert ::codec %)]}
+  (let [unpacker 
+        (fn [buffer]
+          (let [decoded (unpacker buffer)]
+            (reify
+              IEncodeClojure
+              (-js->clj [_ _] decoded))))]
+    (.addExtUnpacker codec id unpacker))
   codec)
 
 (defn add-ext-packers! [codec id type packer unpacker]
+  "Adds the given pakcer and unpacker to the codec. See `add-ext-packer!` 
+  and `add-ext-unpacker!` for more information."
+  {:pre [(s/assert ::codec codec)
+         (s/assert ::byte id)
+         (s/assert ::type type)
+         (s/assert ::packer packer)
+         (s/assert ::unpacker unpacker)]
+   :post [#(s/assert ::codec %)]}
   (-> codec
       (add-ext-packer! id type packer)
       (add-ext-unpacker! id unpacker)))
 
-
 (defn create-encode-stream [& {:as options}]
   (let [options (prepare-options options)]
-    (msgpack.createWriteStream options)))
+    (msgpack.createEncodeStream options)))
 
 (defn create-decode-stream [& {:as options}]
   (let [options (prepare-options options)]
