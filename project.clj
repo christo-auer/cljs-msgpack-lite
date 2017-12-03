@@ -9,7 +9,11 @@
                  [org.clojure/clojurescript "1.9.908"]]
 
   :plugins [[lein-cljsbuild "1.1.7" :exclusions [[org.clojure/clojure]]]
-            [lein-figwheel "0.5.13"] ]
+            [lein-figwheel "0.5.13"]
+            [lein-npm "0.6.2"]]
+
+  :npm {:dependencies [[msgpack-lite "0.1.26"]]
+        :devDependencies [[ws "3.3.2"]]}
 
   :source-paths ["src"]
 
