@@ -6,7 +6,6 @@
 
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [camel-snake-kebab "0.4.0"]
-                 [cljs-node-io "0.5.0"]
                  [org.clojure/clojurescript "1.9.908"]]
 
   :plugins [[lein-cljsbuild "1.1.7" :exclusions [[org.clojure/clojure]]]
