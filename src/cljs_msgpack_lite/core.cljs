@@ -2,6 +2,8 @@
   (:require [cljs.spec.alpha :as s]
             [camel-snake-kebab.core :refer [->camelCase]]))
 
+(def node-stream (js/require "stream"))
+(def Transform (.-Transform node-stream))
 
 (def msgpack 
   ^:private
@@ -19,6 +21,7 @@
 (defn- bool? [x] (contains? #{true false} x))
 (s/def ::any any?)
 (s/def ::buffer #(= (type %) Buffer))
+(s/def ::Transform (partial instance? (.-Transform node-stream)))
 (s/def ::byte (s/and int? #(<= 0 % 255)))
 (s/def ::byte-array (s/coll-of ::byte))
 (s/def ::codec #(= (type %) Codec))
@@ -172,3 +175,29 @@
   (-> codec
       (add-ext-packer! id type packer)
       (add-ext-unpacker! id unpacker)))
+
+
+(defn create-encode-transform [& options]
+  "Creates an encode transform that can be piped to another
+  stream. `options` are passed to the `encode` call (see
+  documentation of `encode` for more information)."
+  {:pre [(s/assert :encode-options options)]
+   :post [#(s/assert ::Transform %)]}
+  (let [encoder (fn [chunk encoding callback]
+                  (this-as this
+                           (.push this (apply encode chunk options))
+                           (callback)))]
+    (Transform. (clj->js {:objectMode true :transform encoder}))))
+
+(defn create-decode-transform [& options]
+  "Creates a decode transform that can read from another
+  stream. `options` are passed to the `decode` call (see
+  documentation of `decode` for more information)."
+  {:pre [(s/assert :decode-options options)]
+   :post [#(s/assert ::Transform %)]}
+  (let [decoder (fn [chunk encoding callback]
+                  (this-as this
+                           (.push this (apply decode chunk options))
+                           (callback)))]
+    (Transform. (clj->js {:readableObjectMode true :transform decoder}))))
+
