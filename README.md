@@ -9,7 +9,7 @@
 
 Add
 ```clojure
-[cljs-msgpack-lite "0.1.3"]
+[cljs-msgpack-lite "0.1.4"]
 ```
 to your project dependencies (e.g., `project.clj` for leiningen).
 
