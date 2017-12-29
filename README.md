@@ -202,6 +202,52 @@ As with `encode` above, `decode` gets rebound in the recursive calls and any
 options passed to the initial call are automatically passed to the all
 subsequend calls.
 
+## Encoding and Decoding Streams
+
+To encode to and decode from a stream, respectively, `Transform`s can
+be created by `create-encode-transform` and `create-decode-transform`. The
+following example defines an `encode-to-file` and a `decode-from-file` function
+for storing ClojureScript objects to a file and retrieving them back:
+```Clojure
+(ns your-namespace.stream-example
+  (:require [cljs-msgpack-lite.core :as msp]))
+
+(def fs (js/require "fs"))
+
+(defn encode-to-file [data file-path & opts]
+  (let [encode-transform (apply msp/create-encode-transform opts)
+        fos (.createWriteStream fs file-path)]
+    (.pipe encode-transform fos)
+    (.write encode-transform data)
+    (.end encode-transform)
+    (.end fos)))
+
+(defn decode-from-file [file-path callback & opts]
+  (let [decode-transform (apply msp/create-decode-transform opts)
+        fis (.createReadStream fs file-path)]
+    (.pipe fis decode-transform)
+    (.on fis "readable"
+         (fn []
+           (let [res (.read decode-transform)]
+             (.end decode-transform)
+             (callback res))))))
+```
+Note that each function creates a transform that is piped to a file stream. The
+options passed to `create-encode-transform` and `create-decode-transform` are
+passed to `encode` and `decode`, respectively. For instance:
+```Clojure
+=> (def clj-codec (create-clj-codec))
+
+=> (def some-fancy-cljs-data {:foo "bar" :array [1 2 3] :list '("a" "b" "c")})
+
+=> (encode-to-file some-fancy-cljs-data "test.msp" :codec clj-codec)
+
+=> (decode-from-file "test.msp"
+        #(print % " = " some-fancy-cljs-data " ? " (= % some-fancy-cljs-data))
+        :codec clj-codec :keywordize-keys true)
+{:foo bar, :array [1 2 3], :list (a b c)}  =  {:foo bar, :array [1 2 3], :list (a b c)}  ?  true
+```
+
 # License
 
 Copyright ©2017 Christopher Auer
