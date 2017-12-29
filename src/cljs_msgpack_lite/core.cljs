@@ -172,11 +172,3 @@
   (-> codec
       (add-ext-packer! id type packer)
       (add-ext-unpacker! id unpacker)))
-
-(defn create-encode-stream [& {:as options}]
-  (let [options (prepare-options options)]
-    (msgpack.createEncodeStream options)))
-
-(defn create-decode-stream [& {:as options}]
-  (let [options (prepare-options options)]
-    (msgpack.createDecodeStream options)))
