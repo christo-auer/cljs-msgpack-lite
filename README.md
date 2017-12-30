@@ -1,3 +1,5 @@
+[![Clojars Project](https://img.shields.io/clojars/v/cljs-msgpack-lite.svg)](https://clojars.org/cljs-msgpack-lite)
+
 # Introduction
 
 `cljs-msgpack-lite` is a lightweight and convenient wrapper around
