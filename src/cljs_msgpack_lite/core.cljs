@@ -1,5 +1,7 @@
 (ns cljs-msgpack-lite.core
   (:require [cljs.spec.alpha :as s]
+            [clojure.spec.test.alpha :as st]
+            [goog.object :as gobject]
             [camel-snake-kebab.core :refer [->camelCase]]))
 
 (def node-stream (js/require "stream"))
@@ -17,40 +19,30 @@
   ^:private
   (->  "msgpack-lite/lib/codec-base" js/require .-preset type))
 
+(def Decoder (.-Decoder msgpack))
+
+(def Encoder (.-Encoder msgpack))
+
 ; specs
 (defn- bool? [x] (contains? #{true false} x))
 (s/def ::any any?)
-(s/def ::buffer #(= (type %) Buffer))
+(s/def ::Buffer #(instance? Buffer %))
 (s/def ::Transform (partial instance? (.-Transform node-stream)))
 (s/def ::byte (s/and int? #(<= 0 % 255)))
-(s/def ::byte-array (s/coll-of ::byte))
-(s/def ::codec #(= (type %) Codec))
-(s/def ::encode-options (s/keys :opt-un [::codec]))
-(s/def ::decode-options (s/keys :opt-un [::codec]))
+(s/def ::byte-array (s/coll-of ::byte :kind vec))
+(s/def ::codec #(instance? Codec %))
+(s/def ::keywordize-keys (partial contains? #{true false}))
+(s/def ::js->clj (partial contains? #{true false}))
 (s/def ::preset bool?)
 (s/def ::safe bool?)
 (s/def ::useraw bool?)
 (s/def ::binarraybuffer bool?)
 (s/def ::uint8array bool?)
 (s/def ::usemap bool?)
-(s/def ::create-codec-options (s/keys :opt-un [::preset ::safe ::useraw ::binarraybuffer ::uint8array ::usemap]))
 (s/def ::codec #(= (type %) Codec))
 (s/def ::packer fn?)
 (s/def ::unpacker fn?)
 (s/def ::type fn?)
-
-(defn ->buffer 
-  "Convert an array of bytes into a buffer, leaves a buffer as a buffer.
-  Takes an array of bytes and turns into in to a msgpack-lite buffer. If `v`
-  is already a buffer, `v` is left alone. Note that `clj->js` is applied to
-  `v` before it is turned into a buffer.
-  Example:
-    (->buffer [0x12 0x13 0x14])"
-  {:pre (s/assert (s/or ::buffer ::buffer ::byte-array ::byte-array))
-   :post (s/assert ::buffer)}
-  [v]
-  (Buffer (clj->js v)))
-
 
 (defn- ->camel-case-keys 
   [options]
@@ -64,9 +56,35 @@
   ^:private 
   prepare-options (comp clj->js ->camel-case-keys))
 
+(defn- codec-clj->js
+  [codec x]
+  (cond
+    (and (some? x) codec (.getExtPacker codec x)) x
+    (nil? x) nil
+    (keyword? x) (name x)
+    (symbol? x) (str x)
+    (map? x) (let [m (js-obj)]
+               (doseq [[k v] x]
+                 (gobject/set m (key->js k) (codec-clj->js codec v)))
+               m)
+    (coll? x) (let [arr (array)]
+                (doseq [x (map (partial codec-clj->js codec) x)]
+                  (.push arr x))
+                arr)
+    :else x))
+
+(defn- mk-internal-encode [options]
+ (fn [value & {:as more-options}]
+                  (let [options (merge options more-options)
+                        codec (:codec options)
+                        value (codec-clj->js codec value)]
+                    (msgpack.encode 
+                      value 
+                      (prepare-options options)))))
+
 (defn 
   ^:dynamic
-  encode [value & {:as options}]
+  encode 
   "Encodes the given value using `msgpack-lite`'s encode.
   The encoded value is returned in a `buffer`.
   An optional `codec` can be passed with `:codec codec`.
@@ -74,86 +92,92 @@
   the initial call are automatically passed to any subsequent 
   call of `encode`.  Any options passed to recursive calls of 
   `encode` overrides prior options (as in `merge`)."
-  {:pre [(s/assert ::any value)
-         (s/assert ::encode-options options)]
-   :post [#(s/assert ::buffer %)]}
-  (letfn [(-encode [value & {:as more-options}]
-            (let [options (merge options more-options)
-                  codec (:codec options)
-                  value (if (and codec (.getExtPacker codec value))
-                          value
-                          (clj->js value))]
-            (msgpack.encode 
-              value 
-              (prepare-options options))))]
-    (binding [encode -encode]
-      (encode value))))
+  [value & {:as options}]
+  (binding [encode (mk-internal-encode options)]
+    (encode value)))
 
+(s/fdef
+  encode
+  :args (s/cat :value ::any :options (s/keys* :opt-un [::codec] )) 
+  :ret ::Buffer)
+
+(defn- mk-decode-post-proc [options]
+  (let [{keywordize-keys :keywordize-keys 
+         js->clj :js->clj
+         :or {keywordize-keys false js->clj true}} options]
+    (case [js->clj keywordize-keys]
+      [false false] identity
+      [false true]  clojure.walk/keywordize-keys
+      #(cljs.core/js->clj % :keywordize-keys keywordize-keys))))
+
+(defn- mk-internal-decode [options]
+  (fn [buffer & {:as more-options}]
+    (let [options (merge options more-options)
+          post-proc (mk-decode-post-proc options)
+          js-options (-> options
+                         (dissoc :keywordize-keys :js->clj)
+                         prepare-options)]
+      (-> buffer
+          (msgpack.decode js-options)
+          post-proc))))
 
 (defn 
   ^:dynamic
-  decode [buffer & {:as options}]
+  decode 
   "Decodes the given buffer using `msgpack-lite`'s decode.
   `buffer` can be a `buffer` or a byte array (e.g., `[0x03 0x3f]`).
   An optional `codec` can be passed with `:codec codec`.
+  Any object decoded is passed to `js->clj` unless `:js->clj false` is 
+  passed as option (default is `:js->clj true`. If `:keywordize-keys true`
+  is passed as option, `clojure.walk/keywordize-keys` is applied to
+  the decoded object, i.e., all keys of maps are replaced by keywords.
+  Default is `:keywordize-keys false`.
   Note: `decode` is rebound so that any options passed to
   the initial call are automatically passed to any subsequent call of `decode`.
   Any options passed to recursive calls of `decode` 
   overrides prior options (as in `merge`)."
-  {:pre [(s/assert (s/or ::buffer ::buffer ::byte-array ::byte-array) buffer)
-         (s/assert ::decode-options options)]
-   :post [#(s/assert ::any %)]}
-  (letfn [(-decode [buffer & {:as more-options}]
-            (let [options (merge options more-options)
-                  {keywordize-keys :keywordize-keys 
-                   js->clj :js->clj
-                   :as options :or {keywordize-keys false js->clj true}} options
-                  js-options (-> options
-                                 (dissoc :keywordize-keys :js->clj)
-                                 prepare-options)
-                  buffer (->buffer buffer)
-                  post-proc (case [js->clj keywordize-keys]
-                              [false false] identity
-                              [false true]  clojure.walk/keywordize-keys
-                              #(cljs.core/js->clj % :keywordize-keys keywordize-keys))]
-              (-> buffer
-                  (msgpack.decode js-options)
-                  post-proc)))]
-    (binding [decode -decode]
-      (decode buffer))))
+  [buffer & {:as options}]
+  (binding [decode (mk-internal-decode options)]
+    (decode buffer)))
 
+(s/fdef
+  decode
+  :args (s/cat :buffer (s/or ::Buffer ::Buffer ::byte-array ::byte-array) :opts (s/keys* :opt-un [::codec ::keywordize-keys ::js->clj]))
+  :post ::any)
 
-(defn create-codec [& {:as options}] 
+(defn create-codec 
   "Creates and returns a new codec with the given options. 
   The options are defined on https://github.com/kawanet/msgpack-lite 
-  and can be defined by keywords, e.g., `(create-codec :useraw true)`"
-  {:pre [(s/assert ::create-codec-options options)]
-   :post [#(s/assert ::codec %)]}
+  and can be defined by keywords, e.g., `(create-codec :useraw true)`" 
+  [& {:as options}]
   (msgpack.createCodec (prepare-options options)))
 
-(defn add-ext-packer! [codec id type packer]
+(s/fdef create-codec 
+        :args (s/cat :create-codec-options (s/keys* :opt-un [::preset ::safe ::useraw ::binarraybuffer ::uint8array ::usemap])) 
+        :post ::codec)
+
+(defn add-ext-packer! 
   "Adds the given packer to the codec, where `id` is the identifier for the 
   msgpack extension (`(<= 0 id 255)`), type is the data type for which 
   to use the packer and `packer` is a function that takes a value of 
   type `type` and returns a `buffer` in which the value is encoded.
   Returns the modified codec."
-  {:pre [(s/assert ::codec codec)
-         (s/assert ::byte id)
-         (s/assert ::type type)
-         (s/assert ::packer packer)]
-   :post [#(s/assert ::codec %)]}
+  [codec id type packer]
   (.addExtPacker codec id type packer)
   codec)
 
-(defn add-ext-unpacker! [codec id unpacker]
+(s/fdef 
+  add-ext-packer!
+  :args (s/cat :codec ::codec :id ::byte :type ::type :packer ::packer)
+  :ret ::codec)
+
+
+(defn add-ext-unpacker! 
   "Adds the given unpacker to the codec, where `id` is the identifier for the 
   msgpack extension (`(<= 0 id 255)`) and `unpacker` is a function that takes 
   a buffer, and extracts and returns the corresponding value.
   Returns the modified codec."
-  {:pre [(s/assert ::codec codec)
-         (s/assert ::byte id)
-         (s/assert ::packer unpacker)]
-   :post [#(s/assert ::codec %)]}
+  [codec id unpacker]
   (let [unpacker 
         (fn [buffer]
           (let [decoded (unpacker buffer)]
@@ -163,41 +187,85 @@
     (.addExtUnpacker codec id unpacker))
   codec)
 
-(defn add-ext-packers! [codec id type packer unpacker]
+(s/fdef 
+  add-ext-unpacker!
+  :args (s/cat :codec ::codec :id ::byte :unpacker ::unpacker)
+  :ret ::codec)
+
+(defn add-ext-packers! 
   "Adds the given pakcer and unpacker to the codec. See `add-ext-packer!` 
   and `add-ext-unpacker!` for more information."
-  {:pre [(s/assert ::codec codec)
-         (s/assert ::byte id)
-         (s/assert ::type type)
-         (s/assert ::packer packer)
-         (s/assert ::unpacker unpacker)]
-   :post [#(s/assert ::codec %)]}
+  [codec id type packer unpacker]
   (-> codec
       (add-ext-packer! id type packer)
       (add-ext-unpacker! id unpacker)))
 
+(s/fdef 
+  add-ext-packers!
+  :args (s/cat :codec ::codec :id ::byte :type ::type :packer ::packer :unpacker ::unpacker)
+  :ret ::codec)
 
-(defn create-encode-transform [& options]
+(defn create-encode-transform 
   "Creates an encode transform that can be piped to another
-  stream. `options` are passed to the `encode` call (see
-  documentation of `encode` for more information)."
-  {:pre [(s/assert :encode-options options)]
-   :post [#(s/assert ::Transform %)]}
-  (let [encoder (fn [chunk encoding callback]
-                  (this-as this
-                           (.push this (apply encode chunk options))
-                           (callback)))]
-    (Transform. (clj->js {:objectMode true :transform encoder}))))
+  stream. With `options` an optional codec can be defined with 
+  `:codec codec`. As with `encode`, the symbol
+  `encode` is rebound so that any options passed to
+  `create-encode-transform` are automatically passed to any subsequent 
+  call of `encode`, in particular `:codec codec`.  Any options 
+  passed to recursive calls of `encode` overrides prior 
+  options (as in `merge`)."
+  [& {:as options}]
+  (let [internal-encode (mk-internal-encode options)
+        encoder-buffer (Encoder (prepare-options options))
+        encoder-transform (fn [chunk encoding callback]
+                            (binding [encode internal-encode]
+                              (this-as this
+                                       (.write encoder-buffer (codec-clj->js (:codec options) chunk))
+                                       (.push this (.read encoder-buffer))
+                                       (if (some? callback) (callback)))))
+        encoder-flush (fn [callback]
+                        (.flush encoder-buffer)
+                        (if (some? callback) (callback)))
+        transform (Transform. (clj->js {:objectMode true :transform encoder-transform :flush encoder-flush}))]
+    (set! (.-push encoder-buffer) (fn [chunk] (.push transform chunk)))
+    transform))
 
-(defn create-decode-transform [& options]
-  "Creates a decode transform that can read from another
-  stream. `options` are passed to the `decode` call (see
-  documentation of `decode` for more information)."
-  {:pre [(s/assert :decode-options options)]
-   :post [#(s/assert ::Transform %)]}
-  (let [decoder (fn [chunk encoding callback]
-                  (this-as this
-                           (.push this (apply decode chunk options))
-                           (callback)))]
-    (Transform. (clj->js {:readableObjectMode true :transform decoder}))))
+(s/fdef
+  create-encode-transform
+  :args (s/cat :options (s/keys* :opt-un [::codec]))
+  :post ::Transform)
+
+(defn create-decode-transform 
+  "Creates a decode transform that can read from another stream (via `.pipe`).
+  An optional `codec` can be passed with `:codec codec`.
+  Any object decoded is passed to `js->clj` unless `:js->clj false` is 
+  passed as option (default is `:js->clj true`. If `:keywordize-keys true`
+  is passed as option, `clojure.walk/keywordize-keys` is applied to
+  the decoded object, i.e., all keys of maps are replaced by keywords.
+  Default is `:keywordize-keys false`.
+  Note: `decode` is rebound so that any options passed to
+  `create-decode-transform` are automatically passed to any subsequent 
+  call of `decode`.  Any options passed to recursive calls of `decode` 
+  overrides prior options (as in `merge`)."
+  [& {:as options}]
+  (let [internal-decode (mk-internal-decode options)
+        decoder-buffer (Decoder (prepare-options options))
+        post-proc (mk-decode-post-proc options)
+        decoder-transform
+        (fn [chunk encoding callback]
+          (binding [decode internal-decode]
+            (this-as this
+                     (.write decoder-buffer chunk)
+                     (.flush decoder-buffer)
+                     (if (some? callback) (callback)))))
+        transform (Transform. (clj->js {:readableObjectMode true :transform decoder-transform}))]
+    (set! (.-push decoder-buffer) (fn [chunk] (.push transform (post-proc chunk))))
+    transform))
+
+(s/fdef
+  create-decode-transform
+  :args (s/cat :options (s/keys* :opt-un [::codec ::keywordize-keys ::js->clj]))
+  :post ::Transform)
+
+(st/instrument `cljs-msgpack-lite.core)
 
