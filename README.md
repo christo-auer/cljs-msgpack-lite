@@ -11,7 +11,7 @@
 
 Add
 ```clojure
-[cljs-msgpack-lite "0.1.4"]
+[cljs-msgpack-lite "0.1.5"]
 ```
 to your project dependencies (e.g., `project.clj` for leiningen).
 
@@ -75,8 +75,8 @@ identifiers so that both are mutually compatible. However, ClojureScript does
 not support Clojure's `Ratio` and `Char`. For these two types, surrogate types
 are defined in `cljs-msgpack-lite`:
 ```clojure
-(deftype CljChar [character])
-(deftype CljRatio [numerator denominator])
+(defrecord CljChar [character])
+(defrecord CljRatio [numerator denominator])
 ```
 For example:
 ```clojure
@@ -86,13 +86,13 @@ For example:
 => (def ratio (decode ratio-buffer :codec clj-codec))
 #'cljs-msgpack-lite.core/ratio
 
-=> (.-numerator ratio)
+=> (:numerator ratio)
 1
-=> (.-denominator ratio)
+=> (:denominator ratio)
 3
 ```
-The following table summarizes all types and the counterparts defined by
-`clj-codec`:
+The following table summarizes all types in accordancw with
+[clojure-msgpack](https://github.com/edma2/clojure-msgpack):
 
 ClojureScript Type                     | Message Pack ID
 ---------------------------------------|----------------
@@ -101,6 +101,24 @@ ClojureScript Type                     | Message Pack ID
 `cljs-msgpack-lite.clj-codec/CljChar`  | 0x05
 `cljs-msgpack-lite.clj-codec/CljRatio` | 0x06
 `PersistentHashSet`                    | 0x07
+
+In addition to these, additional extensions are defined for
+ClojureScript maps (`PersistentArrayMap`) and ClojuresScript lists, for
+technical reasons one for the empty list `'()` and for non-empty lists.
+By default, maps are converted to and from JS objects and lists to vectors.
+
+ClojureScript Type                     | Message Pack ID
+---------------------------------------|----------------
+`PersistentArrayMap`                   | 0x08
+`EmptyList`                            | 0x09
+`List`                                 | 0x10
+
+These can be inluded by passing `:include-map true` for maps and `:include-list
+true` for lists to `create-clj-codec`, e.g., `(create-clj-codec :include-map
+true :include-list true)`. 
+
+By default, these extensions are deactivated and they
+**break compatibility** with [clojure-msgpack](https://github.com/edma2/clojure-msgpack).
 
 ## Defining a Codec
 
@@ -236,7 +254,7 @@ for storing ClojureScript objects to a file and retrieving them back:
 ```
 Note that each function creates a transform that is piped to a file stream. The
 options passed to `create-encode-transform` and `create-decode-transform` are
-passed to `encode` and `decode`, respectively. For instance:
+the same as for `encode` and `decode`, respectively. For instance:
 ```Clojure
 => (def clj-codec (create-clj-codec))
 
@@ -252,6 +270,6 @@ passed to `encode` and `decode`, respectively. For instance:
 
 # License
 
-Copyright ©2017 Christopher Auer
+Copyright ©2018 Christopher Auer
 
 Distributed under the MIT License. Please see the LICENSE file at the top level of this repo.
