@@ -35,7 +35,7 @@ npm install msgpack-lite --save
 42
 ```
 Collections (`coll?`), maps (`map?`) and sets (`PersistentHashSet`) are
-automatically converted into their js counterparts before encoding and after
+automatically converted into their JS counterparts before encoding and after
 decoding:
 ```clojure
 => (-> ["foo" "bar" "baz"] encode decode)
@@ -44,12 +44,13 @@ decoding:
 {"foo" "foo", "bar" "bar"}
 ```
 Note that the keys are turned into strings, which already happens during
-`encode`. To keywordize keys recursively, add `:keywordize-keys true` to decode:
+`encode` (JS does only support strings for keys). To keywordize keys
+recursively, add `:keywordize-keys true` to decode:
 ```clojure
 => (-> {:foo "foo" :bar "bar"} encode (decode :keywordize-keys true))
 {:foo "foo", :bar "bar"}
 ```
-`decode` internally uses `js->clj` to convert any js objects to their
+`decode` internally uses `js->clj` to convert any JS objects to their
 ClojureScript counterparts. If you don't want this, add `:js->clj false` to
 `decode` to get the "raw" result:
 ```clojure
@@ -59,7 +60,7 @@ ClojureScript counterparts. If you don't want this, add `:js->clj false` to
 
 ## Clojure(Script) Types
 
-For encoding and decoding ClojureScript types unknown to js (e.g., keywords),
+For encoding and decoding ClojureScript types unknown to JS (e.g., keywords),
 the codec created by `cljs-msgpack-lite.clj-codec/create-clj-codec` can be used.
 A codec is passed to `encode` and `decode` via the `:codec` option:
 ```clojure
@@ -102,10 +103,12 @@ ClojureScript Type                     | Message Pack ID
 `cljs-msgpack-lite.clj-codec/CljRatio` | 0x06
 `PersistentHashSet`                    | 0x07
 
-In addition to these, additional extensions are defined for
-ClojureScript maps (`PersistentArrayMap`) and ClojuresScript lists, for
-technical reasons one for the empty list `'()` and for non-empty lists.
-By default, maps are converted to and from JS objects and lists to vectors.
+By default, CLJS maps are converted to and from JS objects. In particular, the
+keys of CLJS maps are converted to strings as JavaScript only supports this type
+of key. Also, CLJS lists are converted to JS arrays, losing their flavour of
+being a list. To avoid this, additional extensions are defined for CLJS maps
+(`PersistentArrayMap`) and CLJS lists, for technical reasons one for
+the empty list `'()` and for non-empty lists.
 
 ClojureScript Type                     | Message Pack ID
 ---------------------------------------|----------------
@@ -168,7 +171,7 @@ We can now encode our data type:
 (encode botw :codec game-codec)
 #object[Buffer [...]]
 ```
-A little bit of "magic" happend in the background: We called `encode` with the
+A little bit of "magic" happened in the background: We called `encode` with the
 option `:codec game-codec`, whereas in the packers we call `encode` without any
 further options, in particular, without the codec. What happens is that the
 initial call rebinds `encode` to a function with the options from the initial
@@ -220,7 +223,7 @@ Note that the underlying types here are really our records from above.
 
 As with `encode` above, `decode` gets rebound in the recursive calls and any
 options passed to the initial call are automatically passed to the all
-subsequend calls.
+subsequent calls.
 
 ## Encoding and Decoding Streams
 
