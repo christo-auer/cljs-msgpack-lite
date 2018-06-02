@@ -11,14 +11,9 @@
 
 Add
 ```clojure
-[cljs-msgpack-lite "0.1.5"]
+[cljs-msgpack-lite "0.1.6"]
 ```
 to your project dependencies (e.g., `project.clj` for leiningen).
-
-Also, install the `msgpack-lite` node package, e.g.:
-```sh
-npm install msgpack-lite --save
-```
 
 ## Encode and Decode
 
