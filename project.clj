@@ -1,10 +1,12 @@
-(defproject cljs-msgpack-lite "0.1.5"
+(defproject cljs-msgpack-lite "0.1.6"
   :description "cljs-msgpack-lite is a lightweight and convenient wrapper around msgpack-lite for ClojureScript."
   :url "https://github.com/christo-auer/cljs-msgpack-lite"
 
   :min-lein-version "2.7.1"
 
   :dependencies [[org.clojure/clojure "1.8.0"]
+                 [cljsjs/msgpack-lite "0.1.26-0"]
+                 [org.clojure/core.async "0.4.474"]
                  [camel-snake-kebab "0.4.0"]
                  [org.clojure/test.check "0.10.0-alpha2"]
                  [org.clojure/clojurescript "1.9.908"]]
@@ -14,8 +16,7 @@
             [lein-doo "0.1.8"]
             [lein-npm "0.6.2"]]
 
-  :npm {:dependencies [[msgpack-lite "0.1.26"]]
-        :devDependencies [[ws "3.3.2"]]}
+  :npm {:devDependencies [[ws "3.3.2"]]}
 
   :source-paths ["src" "test"]
 
