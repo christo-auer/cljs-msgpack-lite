@@ -2,35 +2,20 @@
   (:require [cljs.spec.alpha :as s]
             [clojure.spec.test.alpha :as st]
             [goog.object :as gobject]
-            [camel-snake-kebab.core :refer [->camelCase]]))
+            [camel-snake-kebab.core :refer [->camelCase]]
+            [cljsjs.msgpack-lite]))
 
 (def node-stream (js/require "stream"))
 (def Transform (.-Transform node-stream))
 
-(def msgpack 
-  ^:private
-  (js/require "msgpack-lite"))
-
-(def Buffer 
-  ^:private
-  (js/require "msgpack-lite/lib/buffer-global"))
-
-(def Codec
-  ^:private
-  (->  "msgpack-lite/lib/codec-base" js/require .-preset type))
-
-(def Decoder (.-Decoder msgpack))
-
-(def Encoder (.-Encoder msgpack))
-
 ; specs
 (defn- bool? [x] (contains? #{true false} x))
 (s/def ::any any?)
-(s/def ::Buffer #(instance? Buffer %))
+(s/def ::Buffer some?)
 (s/def ::Transform (partial instance? (.-Transform node-stream)))
 (s/def ::byte (s/and int? #(<= 0 % 255)))
 (s/def ::byte-array (s/coll-of ::byte :kind vec))
-(s/def ::codec #(instance? Codec %))
+(s/def ::codec some?)
 (s/def ::keywordize-keys (partial contains? #{true false}))
 (s/def ::js->clj (partial contains? #{true false}))
 (s/def ::preset bool?)
@@ -39,7 +24,7 @@
 (s/def ::binarraybuffer bool?)
 (s/def ::uint8array bool?)
 (s/def ::usemap bool?)
-(s/def ::codec #(= (type %) Codec))
+(s/def ::codec some?)
 (s/def ::packer fn?)
 (s/def ::unpacker fn?)
 (s/def ::type fn?)
@@ -78,7 +63,7 @@
                   (let [options (merge options more-options)
                         codec (:codec options)
                         value (codec-clj->js codec value)]
-                    (msgpack.encode 
+                    (js/msgpack.encode 
                       value 
                       (prepare-options options)))))
 
@@ -118,7 +103,7 @@
                          (dissoc :keywordize-keys :js->clj)
                          prepare-options)]
       (-> buffer
-          (msgpack.decode js-options)
+          (js/msgpack.decode js-options)
           post-proc))))
 
 (defn 
@@ -150,7 +135,7 @@
   The options are defined on https://github.com/kawanet/msgpack-lite 
   and can be defined by keywords, e.g., `(create-codec :useraw true)`" 
   [& {:as options}]
-  (msgpack.createCodec (prepare-options options)))
+  (js/msgpack.createCodec (prepare-options options)))
 
 (s/fdef create-codec 
         :args (s/cat :create-codec-options (s/keys* :opt-un [::preset ::safe ::useraw ::binarraybuffer ::uint8array ::usemap])) 
@@ -216,7 +201,7 @@
   options (as in `merge`)."
   [& {:as options}]
   (let [internal-encode (mk-internal-encode options)
-        encoder-buffer (Encoder (prepare-options options))
+        encoder-buffer (js/msgpack.Encoder (prepare-options options))
         encoder-transform (fn [chunk encoding callback]
                             (binding [encode internal-encode]
                               (this-as this
@@ -249,7 +234,7 @@
   overrides prior options (as in `merge`)."
   [& {:as options}]
   (let [internal-decode (mk-internal-decode options)
-        decoder-buffer (Decoder (prepare-options options))
+        decoder-buffer (js/msgpack.Decoder (prepare-options options))
         post-proc (mk-decode-post-proc options)
         decoder-transform
         (fn [chunk encoding callback]
