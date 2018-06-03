@@ -1,11 +1,12 @@
 (ns cljs-msgpack-lite.core
   (:require [cljs.spec.alpha :as s]
             [clojure.spec.test.alpha :as st]
+            [cljs.nodejs :as node]
             [goog.object :as gobject]
             [camel-snake-kebab.core :refer [->camelCase]]
             [cljsjs.msgpack-lite]))
 
-(def node-stream (js/require "stream"))
+(def node-stream (node/require "stream"))
 (def Transform (.-Transform node-stream))
 
 ; specs
